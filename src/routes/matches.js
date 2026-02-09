@@ -45,6 +45,15 @@ matchRouter.post("/", async (req, res) => {
   }
   try {
     const { startTime, endTime, homeScore, awayScore } = parsed.data;
+    const status = getMatchStatus(startTime, endTime);
+
+    if (!status) {
+      return res.status(400).json({
+        error: "Invalid dates",
+        details: "startTime and endTime must be valid ISO date strings",
+      });
+    }
+
     const [event] = await db
       .insert(matches)
       .values({
@@ -55,7 +64,7 @@ matchRouter.post("/", async (req, res) => {
         endTime: new Date(endTime),
         homeScore: homeScore !== undefined ? homeScore : 0,
         awayScore: awayScore !== undefined ? awayScore : 0,
-        status: getMatchStatus(startTime, endTime),
+        status,
       })
       .returning();
     if (res.app.locals.broadcastMatchCreated) {
@@ -63,8 +72,16 @@ matchRouter.post("/", async (req, res) => {
     }
     res.status(201).json({ data: event });
   } catch (e) {
-    res
-      .status(500)
-      .json({ error: "Failed to create match", details: JSON.stringify(e) });
+    console.error("Match creation error:", e);
+    const errorDetails = {
+      message: e?.message || "Unknown error",
+      code: e?.code,
+      severity: e?.severity,
+      stack: process.env.NODE_ENV === "development" ? e?.stack : undefined,
+    };
+    res.status(500).json({
+      error: "Failed to create match",
+      details: errorDetails,
+    });
   }
 });
